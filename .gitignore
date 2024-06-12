@@ -1,2 +1,6 @@
 __pycache__/
-
+venv/
+Phidget22/
+data/
+.ipynb_checkpoints/
+*.ipynb
