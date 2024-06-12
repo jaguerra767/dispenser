@@ -3,4 +3,6 @@ venv/
 Phidget22/
 data/
 .ipynb_checkpoints/
+.idea/
 *.ipynb
+
