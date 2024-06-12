@@ -11,9 +11,7 @@ class Dispenser:
         self.motor = motor
         self.scale = scale
         self.offset = 0
-        self.data = {}
-        self.data['time'] = []
-        self.data['weight'] = []
+        self.data = {'time': [], 'weight': []}
 
     async def weigh(self, samples=50, sample_rate=100):
         """ Calls the Scale.weigh() method. 

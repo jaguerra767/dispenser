@@ -5,17 +5,19 @@ import numpy as np
 import asyncio
 import csv
 
+
 class Scale:
-    def __init__(self, SIN):
-        self.sin = SIN
+    def __init__(self, sin):
+        self.coefficients = None
+        self.sin = sin
         self.cells = [VoltageRatioInput() for _ in range(4)]
         for cell in range(len(self.cells)):
-            self.cells[cell].setDeviceSerialNumber(SIN)
+            self.cells[cell].setDeviceSerialNumber(sin)
             self.cells[cell].setChannel(cell)
             self.cells[cell].openWaitForAttachment(2000)
             self.cells[cell].setDataInterval(self.cells[cell].getMinDataInterval())
         self.offset = 4122.65
-        self.data = {'c0':[], 'c1':[], 'c2':[], 'c3':[], 'weight':[]}
+        self.data = {'c0': [], 'c1': [], 'c2': [], 'c3': [], 'weight': []}
         self.import_coefficients()
 
     def import_coefficients(self):
@@ -37,7 +39,7 @@ class Scale:
             writer = csv.writer(fp, delimiter=',')
             writer.writerows(new_coefficients)
 
-    def write_coefficients(self):
+    def write_coefficients_(self):
         """Writes newly calculated scale coefficients to csv for a specific row."""
         updated = False
         new_data = []
@@ -53,11 +55,10 @@ class Scale:
 
         if not updated:
             raise Exception("SIN not found in csv")
-        
+
         with open('data/scale_coefficients.csv', 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerows(new_data)
-
 
     async def get_readings(self):
         """Gets all cell readings from Phidget.
@@ -65,15 +66,15 @@ class Scale:
         coros = [self.get_cell_reading(cell) for cell in range(len(self.cells))]
         readings = await asyncio.gather(*coros)
         return readings
-    
+
     async def get_cell_reading(self, cell):
         """Gets reading of a particular cell from Phidget.
         """
         print('DEBUG: ', cell)
         reading = self.cells[cell].getVoltageRatio()
-        self.data[f'c{cell}'] += [reading*self.coefficients[cell]]
+        self.data[f'c{cell}'] += [reading * self.coefficients[cell]]
         return reading
-    
+
     async def get_cell_median(self, cell, samples=1000, sample_rate=50):
         """Finds the median of a given number of weight samples at a given rate.
         Default is 1000 samples over 20 seconds.
@@ -82,7 +83,7 @@ class Scale:
         for _ in range(samples):
             reading = await self.get_cell_reading(cell)
             readings += [reading]
-            await asyncio.sleep(1/sample_rate)
+            await asyncio.sleep(1 / sample_rate)
         med = np.median(readings)
         return med
 
@@ -92,20 +93,20 @@ class Scale:
         # Collects instantaneous cell readings
         readings = await self.get_readings()
         # Takes dot product of readings and coefficients to calculate 
-        weight = sum([readings[reading]*self.coefficients[reading] for reading in range(len(readings))])
+        weight = sum([readings[reading] * self.coefficients[reading] for reading in range(len(readings))])
         # Returns weight minus offset (from tare)
-        return weight-self.offset
+        return weight - self.offset
 
     async def weigh(self, samples=100, sample_rate=50):
         """Takes the median weight over a given time period for a given number of samples
         at a given sample rate while removing outliers.
         """
         self.clear_data()
-        coros = [self.get_cell_median(cell,samples,sample_rate) for cell in range(len(self.cells))]
+        coros = [self.get_cell_median(cell, samples, sample_rate) for cell in range(len(self.cells))]
         median_readings = await asyncio.gather(*coros)
         weight = dot_product(median_readings, self.coefficients)
-        return weight-self.offset
-    
+        return weight - self.offset
+
     async def calibrate(self, test_mass=393.8):
         """Calibrates the load cell system to determine what its coefficients are in order to account for 
         load cell variation and assembly tolerance.
@@ -126,7 +127,7 @@ class Scale:
             b += [[test_mass]]
         try:
             input('Remove test mass and press Enter')
-        except(Exception, KeyboardInterrupt):
+        except (Exception, KeyboardInterrupt):
             pass
         # Conducts final trial (no weight)
         coros = [self.get_cell_median(cell) for cell in range(len(self.cells))]
@@ -136,7 +137,7 @@ class Scale:
         b += [[0]]
 
         # Inputs trial data into matrices and solves 'Ax = b'
-        A, b = np.array(A), np.array(b)
+        a, b = np.array(A), np.array(b)
         x = np.linalg.solve(A, b)
         # Converts x into a list and saves it as an attribute
         x.reshape(1, -1).tolist()[0]
@@ -146,11 +147,11 @@ class Scale:
         # Tares scale and ends method
         await self.tare()
         return 'Calibration Successful'
-    
+
     async def tare(self):
         weight = await self.weigh()
         self.offset += weight
         self.clear_data()
 
     def clear_data(self):
-        self.data = {'c0':[], 'c1':[], 'c2':[], 'c3':[], 'weight':[]}
+        self.data = {'c0': [], 'c1': [], 'c2': [], 'c3': [], 'weight': []}
